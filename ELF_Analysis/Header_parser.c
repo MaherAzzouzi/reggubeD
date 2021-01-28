@@ -54,7 +54,7 @@ int parse(char* path){
 	else
 		printf("Invalid architecture.");
 
-	// Detect the endianness.
+	// Detect the endianness and show it.
 	ident = header.e_ident[EI_DATA];
 	if(ident == ELFDATA2LSB)
 		printf("Little-endian\n");
@@ -63,6 +63,47 @@ int parse(char* path){
 	else
 		printf("Invalid encoding.");
 
+	// Now let's detect the type of the ELF.
+	switch(header.e_type)
+	{
+		case(ET_REL):
+			printf("A relocatable file.\n");
+			break;
+		case(ET_EXEC):
+			printf("An executable file.\n");
+			break;
+		case(ET_DYN):
+			printf("A shared object.\n");
+			break;
+		case(ET_CORE):
+			printf("A core file.\n");
+			break;
+		default:
+			printf("An unknown type.\n");
+	}
+
+	// Where the ELF should run.
+	// Which architecture.
+	// This debugger is for AMD x86_64
+	// so we will check for that.
+	if(header.e_machine == EM_X86_64){
+		printf("Designed for AMD x86_64\n");
+	}else
+		return -1;
+
+	// If we make it until here
+	// We can provide the entry point
+	// Where the CPU should start executing this file.
+	printf("Text starts at offset : %p\n", header.e_entry);
+
+
+	// If the ELF has a program header table show its offset.
+	if(header.e_phoff)
+		printf("The program header table offset : %p\n", header.e_phoff);
+	
+	// If the ELF has a section header table show its offset.
+	if(header.e_shoff)
+		printf("The section header table : %p\n", header.e_shoff);
 
 	return 0;
 }
