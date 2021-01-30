@@ -32,9 +32,10 @@ int parse(char* path){
 	fseek(file, start, SEEK_SET);
 
 	printf("Size %db\n", size);
+	printf("\n[ELF header]\n");
 
 	// Get the header here.
-	fread(&header, 0x1, sizeof(Elf64_Ehdr), file);
+	fread(&header, 0x1, sizeof(header), file);
 	
 	// Exit if the binary provided is not an ELF.
 	if(	header.e_ident[1] != 'E'||
@@ -104,7 +105,48 @@ int parse(char* path){
 	// If the ELF has a section header table show its offset.
 	if(header.e_shoff)
 		printf("The section header table : %p\n", header.e_shoff);
+	
+	// Try to fseek into the start of the program header
+	// and parse it in our struct, then analyze it.
+	fseek(file, header.e_phoff, SEEK_SET);
 
+	// Now we're ready to parse it
+	printf("\n[Program header]\n");
+	printf("There are %d program headers.\n", header.e_phnum);
+	printf("The size of each entry is %p\n", header.e_phentsize);
+	int i;
+
+	// We will be taking information from every element
+	// of the array.
+	// program_header[i]
+	//
+	for(i=0; i<header.e_phnum; i++){
+		fread(&program_h, 0x1, sizeof(program_h), file);
+		switch(program_h.p_type){
+			case PT_LOAD:
+				printf("LOADABLE SEG\n");
+				break;
+			case PT_DYNAMIC:
+				printf("DYNAMIC LINKING\n");
+				break;
+			case PT_INTERP:
+				printf("INTERPRETER\n");
+				break;
+			case PT_NOTE:
+				printf("AUXILIARY\n");
+				break;
+			case PT_PHDR:
+				printf("PROGRAM HEADER SEG\n");
+				break;
+			case PT_TLS:
+				printf("THREAD LOCAL STORAGE\n");
+				break;
+		
+		}
+
+	}
+
+	fclose(file);
 	return 0;
 }
 
