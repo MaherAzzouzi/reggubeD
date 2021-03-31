@@ -10,7 +10,7 @@ int parse(char* path){
 
 	// Check if the file exist
 	// Later we will check if this file is 
-	// an executable ELF.
+	// an ELF executable.
 	if(file==NULL){
 		printf("Can't open the file at : %s\n", path);
 		return -1;
@@ -116,35 +116,94 @@ int parse(char* path){
 	printf("The size of each entry is %p\n", header.e_phentsize);
 	int i;
 
+	// Print a nice line seperator, I can't do that using printf so excuse
+	// the loop xD
+	for(i=0; i<0x57; i++) putchar('-');
+	putchar('\n');
 	// We will be taking information from every element
 	// of the array.
 	// program_header[i]
 	//
+	char interpreter_path[256];
+	printf(STRING_PADD "%-12s%-10s%-10s%-10s%-10s%-10s%s\n"
+					, "SEG_TYPE", "PRM", "OFFSET"
+					, "VirtAddr", "PhysAddr"
+					,"SegSize", "MemSz", "Align");
+
+	for(i=0; i<0x57; i++) putchar('-');
+	putchar('\n');
+
 	for(i=0; i<header.e_phnum; i++){
 		fread(&program_h, 0x1, sizeof(program_h), file);
 		switch(program_h.p_type){
 			case PT_LOAD:
-				printf("LOADABLE SEG\n");
+				printf(STRING_PADD, "LOADABLE SEG");
 				break;
 			case PT_DYNAMIC:
-				printf("DYNAMIC LINKING\n");
+				printf(STRING_PADD, "DYNAMIC LINKING");
 				break;
 			case PT_INTERP:
-				printf("INTERPRETER\n");
+				printf(STRING_PADD, "INTERPRETER");
+				int current = ftell(file);
+				fseek(file, program_h.p_offset, SEEK_SET);
+				fscanf(file, "%256s", interpreter_path);
+				fseek(file, current, SEEK_SET);
 				break;
 			case PT_NOTE:
-				printf("AUXILIARY\n");
+				printf(STRING_PADD, "NOTE");
 				break;
 			case PT_PHDR:
-				printf("PROGRAM HEADER SEG\n");
+				printf(STRING_PADD, "PROGRAM HEADER SEG");
 				break;
 			case PT_TLS:
-				printf("THREAD LOCAL STORAGE\n");
+				printf(STRING_PADD, "THREAD LOCAL STORAGE");
 				break;
-		
+			case PT_GNU_STACK:
+				printf(STRING_PADD, "GNU STACK");
+				break;
+			case PT_GNU_RELRO:
+				printf(STRING_PADD, "GNU RELRO");
+				break;
+			case PT_GNU_EH_FRAME:
+				printf(STRING_PADD, "GNU EH FRAME");
+				break;
+			case PT_GNU_PROPERTY:
+				printf(STRING_PADD, "GNU PROPERTY");
+				break;
 		}
+		
+		// Show the permissions first.
+		printf("%c%c%-10c", program_h.p_flags & PF_R ? 'R' : '-',
+						 program_h.p_flags & PF_W ? 'W' : '-',
+						 program_h.p_flags & PF_X ? 'X' : '-');
+		// Show the offset of the segment in the file.
+		printf(POINTER_PADD, program_h.p_offset);
+		
+		// Show the virtual address of the segment in memory.
+		// if ASLR is enabled you will receive only the offset.
+		printf(POINTER_PADD, program_h.p_vaddr);
 
+		// Show the physical address.
+		printf(POINTER_PADD, program_h.p_paddr);
+	
+		// Show the size of the segment in the file.
+		printf(POINTER_PADD, program_h.p_filesz);
+
+		// Show the size of the segment in memory
+		printf(POINTER_PADD, program_h.p_memsz);
+
+		// Show the alignement, 0 and 1 means no alignement.
+		printf(POINTER_PADD, program_h.p_align);
+		putchar('\n');
 	}
+
+	for(i=0; i<0x57; i++) putchar('-');
+	putchar('\n');
+	// At the end print the interpreter path, usefull in pwn challenges (or re-
+	// al life binaries to know which ld are you linked to)
+	printf("The interpret : %.256s\n", interpreter_path);
+
+
 
 	fclose(file);
 	return 0;

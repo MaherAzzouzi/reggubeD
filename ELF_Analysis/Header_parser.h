@@ -13,3 +13,6 @@
 		Elf32_Phdr program_h;
 	#endif
 #endif
+
+#define POINTER_PADD "%-10p"
+#define STRING_PADD "%-20s"
