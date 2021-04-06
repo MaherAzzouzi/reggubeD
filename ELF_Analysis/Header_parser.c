@@ -1,5 +1,10 @@
 #include "Header_parser.h"
 
+// This function to parse the shstrtab, into an array of pointers.
+char** parse_shstrtab(FILE* file, int offset) {
+	int i;
+	assert(fseek(file, offset, SEEK_SET) == 0);
+}
 
 int parse(char* path){
 
@@ -7,6 +12,8 @@ int parse(char* path){
 	// Trying to open the file provided to the debugger
 	// To get informations about it.
 	FILE* file = fopen(path, "rb");
+	
+	int current;
 
 	// Check if the file exist
 	// Later we will check if this file is 
@@ -32,7 +39,7 @@ int parse(char* path){
 	fseek(file, start, SEEK_SET);
 
 	printf("Size %db\n", size);
-	printf("\n[ELF header]\n");
+	printf(RED "\n[ELF header]\n" DEFAULT);
 
 	// Get the header here.
 	fread(&header, 0x1, sizeof(header), file);
@@ -111,27 +118,27 @@ int parse(char* path){
 	fseek(file, header.e_phoff, SEEK_SET);
 
 	// Now we're ready to parse it
-	printf("\n[Program header]\n");
+	printf(RED "\n[Program header table]\n" DEFAULT);
 	printf("There are %d program headers.\n", header.e_phnum);
 	printf("The size of each entry is %p\n", header.e_phentsize);
 	int i;
 
 	// Print a nice line seperator, I can't do that using printf so excuse
 	// the loop xD
-	for(i=0; i<0x57; i++) putchar('-');
-	putchar('\n');
-	// We will be taking information from every element
-	// of the array.
+	SHOW_LINE(0x58)
+
+
+	// We will be taking information from every element of the array.
 	// program_header[i]
-	//
-	char interpreter_path[256];
+	
+	char interpreter_path[PATH_LEN];
+	memset(interpreter_path, 0, PATH_LEN);
 	printf(STRING_PADD "%-12s%-10s%-10s%-10s%-10s%-10s%s\n"
-					, "SEG_TYPE", "PRM", "OFFSET"
+					, "SEG_TYPE", "PRMS", "OFFSET"
 					, "VirtAddr", "PhysAddr"
 					,"SegSize", "MemSz", "Align");
-
-	for(i=0; i<0x57; i++) putchar('-');
-	putchar('\n');
+	
+	SHOW_LINE(0x58)
 
 	for(i=0; i<header.e_phnum; i++){
 		fread(&program_h, 0x1, sizeof(program_h), file);
@@ -144,7 +151,7 @@ int parse(char* path){
 				break;
 			case PT_INTERP:
 				printf(STRING_PADD, "INTERPRETER");
-				int current = ftell(file);
+				current = ftell(file);
 				fseek(file, program_h.p_offset, SEEK_SET);
 				fscanf(file, "%256s", interpreter_path);
 				fseek(file, current, SEEK_SET);
@@ -156,7 +163,7 @@ int parse(char* path){
 				printf(STRING_PADD, "PROGRAM HEADER SEG");
 				break;
 			case PT_TLS:
-				printf(STRING_PADD, "THREAD LOCAL STORAGE");
+				printf(STRING_PADD, "THREAD LOCAL STORGE");
 				break;
 			case PT_GNU_STACK:
 				printf(STRING_PADD, "GNU STACK");
@@ -196,14 +203,79 @@ int parse(char* path){
 		printf(POINTER_PADD, program_h.p_align);
 		putchar('\n');
 	}
+	
+	SHOW_LINE(0x58)
 
-	for(i=0; i<0x57; i++) putchar('-');
-	putchar('\n');
 	// At the end print the interpreter path, usefull in pwn challenges (or re-
 	// al life binaries to know which ld are you linked to)
-	printf("The interpret : %.256s\n", interpreter_path);
+	if(interpreter_path[0])
+		printf("The interpreter : %.256s\n", interpreter_path);
+	else
+		puts("Statically linked binary, no interpreter found.");
+	
+	
+	/* Now we want to parse the section headers.
+	 * We want to provide the name of each header, its offset and the permissi-
+	 * ons, as that will be important in exploit development (for example know
+	 * if .fini_array is read only, or RW) and many more.
+	 */
+	
+	puts(RED "\n[Section header table]" DEFAULT);
+	printf("%d section headers to parse.\n", header.e_shnum);
+	
+	// Let's first fseek to the start of the section header table.
+	fseek(file, header.e_shoff, SEEK_SET);
+	current = ftell(file);
+	
+	printf("shstrtab is at index %d (section header string table)\n", 
+					header.e_shstrndx);
+	
+	// Parse the shstrtab first as it contains the name of each section header.
+	fseek(file, (header.e_shstrndx)*sizeof(section_h), SEEK_CUR);
+	fread(&section_h, 0x1, sizeof(section_h), file);
 
+	// section_h now contains shstrtab.
+	// Get the offset to the names.
+	fseek(file, section_h.sh_offset, SEEK_SET);
+	char shstrtab_names[1024];
+	
+	// read the names here.
+	fread(shstrtab_names, 1, sizeof(shstrtab_names), file);
+	
+	// return to the start of the section headers array.	
+	fseek(file, current, SEEK_SET);	
+	
+	SHOW_LINE(0x5a)
+	printf("%-20s%-12s%-12s%-12s%-12s%-12s%-12s\n"
+					, "NAME", "VirtAddr", "Offset", "Size"
+					, "Link", "Align", "Flags");
+	SHOW_LINE(0x5a)
+	for(i = 0; i < header.e_shnum; i++) {
+		fread(&section_h, 0x1, sizeof(section_h), file);
 
+		S_PADD(shstrtab_names+section_h.sh_name);
+		P_PADD12(section_h.sh_addr);
+		P_PADD12(section_h.sh_offset);
+		P_PADD12(section_h.sh_size);
+		P_PADD12(section_h.sh_link);
+		P_PADD12(section_h.sh_addralign);
+		
+
+		printf("%c%c%c%c%c%c%c%c%c%c"
+					 , section_h.sh_flags & SHF_WRITE ? 'W' : '-'
+					 , section_h.sh_flags & SHF_EXECINSTR ? 'X' : '-'
+					 , section_h.sh_flags & SHF_ALLOC ? 'A' : '-'
+					 , section_h.sh_flags & SHF_MERGE ? 'M' : '-'
+					 , section_h.sh_flags & SHF_STRINGS ? 'S' : '-'
+					 , section_h.sh_flags & SHF_INFO_LINK ? 'L' : '-'
+					 , section_h.sh_flags & SHF_LINK_ORDER ? 'P' : '-'
+					 , section_h.sh_flags & SHF_OS_NONCONFORMING ? 'O' : '-'
+					 , section_h.sh_flags & SHF_GROUP ? 'G' : '-'
+					 , section_h.sh_flags & SHF_TLS ? 'T' : '-'
+			  );
+		putchar('\n');
+	}
+	SHOW_LINE(0x5a);
 
 	fclose(file);
 	return 0;
